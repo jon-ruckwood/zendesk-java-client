@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zendesk.client.v2.model.Attachment;
 import org.zendesk.client.v2.model.Audit;
+import org.zendesk.client.v2.model.Automation;
 import org.zendesk.client.v2.model.Comment;
 import org.zendesk.client.v2.model.Field;
 import org.zendesk.client.v2.model.Forum;
@@ -33,6 +34,7 @@ import org.zendesk.client.v2.model.OrganizationField;
 import org.zendesk.client.v2.model.SearchResultEntity;
 import org.zendesk.client.v2.model.Status;
 import org.zendesk.client.v2.model.Ticket;
+import org.zendesk.client.v2.model.TicketResult;
 import org.zendesk.client.v2.model.TicketForm;
 import org.zendesk.client.v2.model.Topic;
 import org.zendesk.client.v2.model.Trigger;
@@ -217,6 +219,11 @@ public class Zendesk implements Closeable {
                 handleList(Ticket.class, "tickets")));
     }
 
+    public List<User> getTicketCollaborators(long id) {
+        return complete(submit(req("GET", tmpl("/tickets/{id}/collaborators.json").set("id", id)),
+                handleList(User.class, "users")));
+    }
+
     public void deleteTicket(Ticket ticket) {
         checkHasId(ticket);
         deleteTicket(ticket.getId());
@@ -303,6 +310,21 @@ public class Zendesk implements Closeable {
                 handleList(Ticket.class, "tickets"));
     }
 
+    public Iterable<Ticket> getTicketsByExternalId(String externalId, boolean includeArchived) {
+        Iterable<Ticket> results = new PagedIterable<Ticket>(tmpl("/tickets.json{?external_id}").set("external_id", externalId),
+                handleList(Ticket.class, "tickets"));
+
+        if (!includeArchived || results.iterator().hasNext()) {
+            return results;
+        }
+        return new PagedIterable<Ticket>(tmpl("/search.json{?query}{&type}").set("query", "external_id:" + externalId).set("type", "ticket"),
+                handleList(Ticket.class, "results"));
+    }
+
+    public Iterable<Ticket> getTicketsByExternalId(String externalId) {
+        return getTicketsByExternalId(externalId, false);
+    }
+
     public Iterable<Ticket> getTicketsFromSearch(String searchTerm) {
         return new PagedIterable<Ticket>(tmpl("/search.json{?query}").set("query", searchTerm + "+type:ticket"),
                 handleList(Ticket.class, "results"));
@@ -311,6 +333,11 @@ public class Zendesk implements Closeable {
     public Iterable<Article> getArticleFromSearch(String searchTerm) {
         return new PagedIterable<Article>(tmpl("/help_center/articles/search.json{?query}").set("query", searchTerm),
                 handleList(Article.class, "results"));
+    }
+
+    public Iterable<Article> getArticleFromSearch(String searchTerm, Long sectionId) {
+        return new PagedIterable<Article>(tmpl("/help_center/articles/search.json{?section,query}")
+                .set("query", searchTerm).set("section", sectionId), handleList(Article.class, "results"));
     }
 
     public List<ArticleAttachments> getAttachmentsFromArticle(Long articleID) {
@@ -531,12 +558,48 @@ public class Zendesk implements Closeable {
         return complete(submit(req("POST", cnst("/triggers.json"), JSON, json(Collections.singletonMap("trigger", trigger))),
               handle(Trigger.class, "trigger")));
     }
+    
+    public Trigger updateTrigger(Long triggerId, Trigger trigger) {
+      return complete(submit(req("PUT", tmpl("/triggers/{id}.json").set("id", triggerId), JSON, json(Collections.singletonMap("trigger", trigger))),
+            handle(Trigger.class, "trigger")));
+  }
 
     public void deleteTrigger(long triggerId) { 
        complete(submit(req("DELETE", tmpl("/triggers/{id}.json").set("id", triggerId)), handleStatus()));
     }
     
 
+  // Automations
+  public Iterable<Automation> getAutomations() {
+    return new PagedIterable<Automation>(cnst("/automations.json"),
+        handleList(Automation.class, "automations"));
+  }
+
+  public Automation getAutomation(long id) {
+    return complete(submit(req("GET", tmpl("/automations/{id}.json").set("id", id)),
+        handle(Automation.class, "automation")));
+  }
+
+  public Automation createAutomation(Automation automation) {
+    return complete(submit(
+        req("POST", cnst("/automations.json"), JSON,
+            json(Collections.singletonMap("automation", automation))),
+        handle(Automation.class, "automation")));
+  }
+
+  public Automation updateAutomation(Long automationId, Automation automation) {
+    return complete(submit(
+        req("PUT", tmpl("/automations/{id}.json").set("id", automationId), JSON,
+            json(Collections.singletonMap("automation", automation))),
+        handle(Automation.class, "automation")));
+  }
+
+  public void deleteAutomation(long automationId) {
+    complete(submit(req("DELETE", tmpl("/automations/{id}.json").set("id", automationId)),
+        handleStatus()));
+  }
+
+    
     public Iterable<TwitterMonitor> getTwitterMonitors() { 
         return new PagedIterable<TwitterMonitor>(cnst("/channels/twitter/monitored_twitter_handles.json"),  
               handleList(TwitterMonitor.class, "monitored_twitter_handles"));
@@ -563,6 +626,12 @@ public class Zendesk implements Closeable {
         return new PagedIterable<User>(cnst(uriBuilder.toString()), handleList(User.class, "users"));
     }
 
+    public Iterable<User> getUsersIncrementally(Date startTime) {
+        return new PagedIterable<User>(
+              tmpl("/incremental/users.json{?start_time}").set("start_time", msToSeconds(startTime.getTime())), 
+              handleIncrementalList(User.class, "users"));                
+    }
+
     public Iterable<User> getGroupUsers(long id) {
         return new PagedIterable<User>(tmpl("/groups/{id}/users.json").set("id", id), handleList(User.class, "users"));
     }
@@ -574,6 +643,10 @@ public class Zendesk implements Closeable {
 
     public User getUser(long id) {
         return complete(submit(req("GET", tmpl("/users/{id}.json").set("id", id)), handle(User.class, "user")));
+    }
+
+    public User getAuthenticatedUser() {
+        return complete(submit(req("GET", cnst("/users/me.json")), handle(User.class, "user")));
     }
 
     public Iterable<UserField> getUserFields() {
@@ -843,13 +916,19 @@ public class Zendesk implements Closeable {
        map.put("monitored_twitter_handle_id", monitorId);
       
        return complete(submit(req("POST", cnst("/channels/twitter/tickets.json"), JSON,              
-             json(Collections.singletonMap("ticket", map ))),
+             json(Collections.singletonMap("ticket", map))),
              handle(Ticket.class, "ticket")));
     }
     
     public Iterable<Organization> getOrganizations() {
         return new PagedIterable<Organization>(cnst("/organizations.json"),
                 handleList(Organization.class, "organizations"));
+    }
+
+    public Iterable<Organization> getOrganizationsIncrementally(Date startTime) {
+        return new PagedIterable<Organization>(
+            tmpl("/incremental/users.json{?start_time}").set("start_time", msToSeconds(startTime.getTime())), 
+            handleIncrementalList(Organization.class, "users"));                
     }
 
     public Iterable<OrganizationField> getOrganizationFields() {
@@ -962,6 +1041,35 @@ public class Zendesk implements Closeable {
     public Iterable<Macro> getMacros(){
         return new PagedIterable<Macro>(cnst("/macros.json"),
                 handleList(Macro.class, "macros"));
+    }
+    
+    public Macro getMacro(long macroId){
+      
+      return complete(submit(req("GET", tmpl("/macros/{id}.json").set("id", macroId)), handle(Macro.class, "macro")));
+  }
+    
+  public Macro createMacro(Macro macro) {
+    return complete(submit(
+        req("POST", cnst("/macros.json"), JSON, json(Collections.singletonMap("macro", macro))),
+        handle(Macro.class, "macro")));
+  }
+
+  public Macro updateMacro(Long macroId, Macro macro) {
+    return complete(submit(req("PUT", tmpl("/macros/{id}.json").set("id", macroId), JSON,
+        json(Collections.singletonMap("macro", macro))), handle(Macro.class, "macro")));
+  }
+    
+
+    public Ticket macrosShowChangesToTicket(long macroId) {
+        return complete(submit(req("GET", tmpl("/macros/{id}/apply.json").set("id", macroId)),
+                handle(TicketResult.class, "result"))).getTicket();
+    }
+
+    public Ticket macrosShowTicketAfterChanges(long ticketId, long macroId) {
+        return complete(submit(req("GET", tmpl("/tickets/{ticket_id}/macros/{id}/apply.json")
+                        .set("ticket_id", ticketId)
+                        .set("id", macroId)),
+                handle(TicketResult.class, "result"))).getTicket();
     }
 
     public List<String> addTagToTicket(long id, String... tags) {
@@ -1231,15 +1339,13 @@ public class Zendesk implements Closeable {
     //////////////////////////////////////////////////////////////////////
 
     /**
-     * Get first page of articles from help center.
+     * Get all articles from help center.
      *
-     * @deprecated use #getArticlesFromPage(int). Same as #getArticlesFromPage(0)
      * @return List of Articles.
      */
-    @Deprecated
-    public List<Article> getArticles() {
-        return complete(submit(req("GET", cnst("/help_center/articles.json")),
-                handleList(Article.class, "articles")));
+    public Iterable<Article> getArticles() {
+        return new PagedIterable<Article>(cnst("/help_center/articles.json"),
+                handleList(Article.class, "articles"));
     }
 
     public List<Article> getArticlesFromPage(int page) {
@@ -1471,6 +1577,8 @@ public class Zendesk implements Closeable {
 
     private static final String NEXT_PAGE = "next_page";
     private static final String END_TIME = "end_time";
+    private static final String COUNT = "count";
+    private static final int INCREMENTAL_EXPORT_MAX_COUNT_BY_REQUEST = 1000;
 
     private abstract class PagedAsyncCompletionHandler<T> extends ZendeskAsyncCompletionHandler<T> {
         private String nextPage;
@@ -1544,7 +1652,18 @@ public class Zendesk implements Closeable {
                 if (TimeUnit.SECONDS.toMillis(endTimeNode.asLong()) > System.currentTimeMillis() - FIVE_MINUTES) {
                     setNextPage(null);
                 } else {
-                    setNextPage(node.asText());
+                    // Taking into account documentation found at https://developer.zendesk.com/rest_api/docs/core/incremental_export#polling-strategy
+                    JsonNode countNode = responseNode.get(COUNT);
+                    if (countNode == null) {
+                        throw new NullPointerException(COUNT + " property not found, incremental export pagination not supported" +
+                                (clazz != null ? " for " + clazz.getName() : ""));
+                    }
+
+                    if (countNode.asInt() < INCREMENTAL_EXPORT_MAX_COUNT_BY_REQUEST) {
+                        setNextPage(null);
+                    } else {
+                        setNextPage(node.asText());
+                    }
                 }
             }
         };
