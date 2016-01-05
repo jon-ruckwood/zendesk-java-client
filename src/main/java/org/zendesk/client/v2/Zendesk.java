@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /**
@@ -85,6 +86,7 @@ public class Zendesk implements Closeable {
     private boolean closed = false;
     private static final Map<String, Class<? extends SearchResultEntity>> searchResultTypes = searchResultTypes();
     private static final Map<String, Class<? extends Target>> targetTypes = targetTypes();
+    private static final long COMPLETION_TIMEOUT_SECS = 30;
 
     private static Map<String, Class<? extends SearchResultEntity>> searchResultTypes() {
        Map<String, Class<? extends SearchResultEntity>> result = new HashMap<String, Class<? extends
@@ -1634,7 +1636,10 @@ public class Zendesk implements Closeable {
 
     private static <T> T complete(ListenableFuture<T> future) {
         try {
-            return future.get();
+            // TODO: timeout to combat problem with async-http-client, see: https://github.com/AsyncHttpClient/async-http-client/issues/1070
+            return future.get(COMPLETION_TIMEOUT_SECS, TimeUnit.SECONDS);
+        } catch(TimeoutException e) {
+            throw new ZendeskException(e.getMessage(), e);
         } catch (InterruptedException e) {
             throw new ZendeskException(e.getMessage(), e);
         } catch (ExecutionException e) {
