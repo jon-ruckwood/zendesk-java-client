@@ -1,6 +1,7 @@
 package org.zendesk.client.v2;
 
-import com.ning.http.client.Response;
+
+import org.asynchttpclient.Response;
 
 import java.io.IOException;
 import java.text.MessageFormat;

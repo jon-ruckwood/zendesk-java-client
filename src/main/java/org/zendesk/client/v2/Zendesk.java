@@ -7,14 +7,14 @@ import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.ning.http.client.AsyncCompletionHandler;
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.ListenableFuture;
-import com.ning.http.client.Realm;
-import com.ning.http.client.Request;
-import com.ning.http.client.RequestBuilder;
-import com.ning.http.client.Response;
-
+import org.asynchttpclient.AsyncCompletionHandler;
+import org.asynchttpclient.AsyncHttpClient;
+import org.asynchttpclient.DefaultAsyncHttpClient;
+import org.asynchttpclient.ListenableFuture;
+import org.asynchttpclient.Realm;
+import org.asynchttpclient.Request;
+import org.asynchttpclient.RequestBuilder;
+import org.asynchttpclient.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zendesk.client.v2.model.Attachment;
@@ -34,8 +34,8 @@ import org.zendesk.client.v2.model.OrganizationField;
 import org.zendesk.client.v2.model.SearchResultEntity;
 import org.zendesk.client.v2.model.Status;
 import org.zendesk.client.v2.model.Ticket;
-import org.zendesk.client.v2.model.TicketResult;
 import org.zendesk.client.v2.model.TicketForm;
+import org.zendesk.client.v2.model.TicketResult;
 import org.zendesk.client.v2.model.Topic;
 import org.zendesk.client.v2.model.Trigger;
 import org.zendesk.client.v2.model.TwitterMonitor;
@@ -121,13 +121,11 @@ public class Zendesk implements Closeable {
         this.logger = LoggerFactory.getLogger(Zendesk.class);
         this.closeClient = client == null;
         this.oauthToken = null;
-        this.client = client == null ? new AsyncHttpClient() : client;
+        this.client = client == null ? new DefaultAsyncHttpClient() : client;
         this.url = url.endsWith("/") ? url + "api/v2" : url + "/api/v2";
         if (username != null) {
-            this.realm = new Realm.RealmBuilder()
+            this.realm = new Realm.Builder(username, password)
                     .setScheme(Realm.AuthScheme.BASIC)
-                    .setPrincipal(username)
-                    .setPassword(password)
                     .setUsePreemptiveAuth(true)
                     .build();
         } else {
@@ -144,7 +142,7 @@ public class Zendesk implements Closeable {
         this.logger = LoggerFactory.getLogger(Zendesk.class);
         this.closeClient = client == null;
         this.realm = null;
-        this.client = client == null ? new AsyncHttpClient() : client;
+        this.client = client == null ? new DefaultAsyncHttpClient() : client;
         this.url = url.endsWith("/") ? url + "api/v2" : url + "/api/v2";
         if (oauthToken != null) {
             this.oauthToken = oauthToken;
@@ -166,7 +164,11 @@ public class Zendesk implements Closeable {
 
     public void close() {
         if (closeClient && !client.isClosed()) {
-            client.close();
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new ZendeskException("Could not close Zendesk client", e);
+            }
         }
         closed = true;
     }
@@ -1422,7 +1424,7 @@ public class Zendesk implements Closeable {
                 logger.debug("Request {} {}\n{}", request.getMethod(), request.getUrl(), request.getStringData());
             } else if (request.getByteData() != null) {
                 logger.debug("Request {} {} {} {} bytes", request.getMethod(), request.getUrl(),
-                        request.getHeaders().getFirstValue("Content-type"), request.getByteData().length);
+                        request.getHeaders().get("Content-type"), request.getByteData().length);
             } else {
                 logger.debug("Request {} {}", request.getMethod(), request.getUrl());
             }
