@@ -12,7 +12,6 @@ import org.zendesk.client.v2.model.Type;
 
 import java.util.Calendar;
 import java.util.Date;
-import java.util.concurrent.TimeoutException;
 
 import static java.util.Calendar.JANUARY;
 import static java.util.Calendar.MILLISECOND;
@@ -82,6 +81,5 @@ public class ZendeskTest {
 
         // then
         assertThat(th, instanceOf(ZendeskException.class));
-        assertThat(th.getCause(), instanceOf(TimeoutException.class));
     }
 }

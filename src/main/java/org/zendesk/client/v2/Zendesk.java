@@ -8,13 +8,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.ning.http.client.AsyncCompletionHandler;
-import com.ning.http.client.AsyncHttpClient;
-import com.ning.http.client.ListenableFuture;
-import com.ning.http.client.Realm;
-import com.ning.http.client.Request;
-import com.ning.http.client.RequestBuilder;
-import com.ning.http.client.Response;
+import org.asynchttpclient.AsyncCompletionHandler;
+import org.asynchttpclient.AsyncHttpClient;
+import org.asynchttpclient.DefaultAsyncHttpClient;
+import org.asynchttpclient.ListenableFuture;
+import org.asynchttpclient.Realm;
+import org.asynchttpclient.Request;
+import org.asynchttpclient.RequestBuilder;
+import org.asynchttpclient.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zendesk.client.v2.model.Attachment;
@@ -34,8 +35,8 @@ import org.zendesk.client.v2.model.OrganizationField;
 import org.zendesk.client.v2.model.SearchResultEntity;
 import org.zendesk.client.v2.model.Status;
 import org.zendesk.client.v2.model.Ticket;
-import org.zendesk.client.v2.model.TicketResult;
 import org.zendesk.client.v2.model.TicketForm;
+import org.zendesk.client.v2.model.TicketResult;
 import org.zendesk.client.v2.model.Topic;
 import org.zendesk.client.v2.model.Trigger;
 import org.zendesk.client.v2.model.TwitterMonitor;
@@ -69,7 +70,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /**
@@ -88,7 +88,6 @@ public class Zendesk implements Closeable {
     private boolean closed = false;
     private static final Map<String, Class<? extends SearchResultEntity>> searchResultTypes = searchResultTypes();
     private static final Map<String, Class<? extends Target>> targetTypes = targetTypes();
-    private static final long COMPLETION_TIMEOUT_SECS = 30;
 
     private static Map<String, Class<? extends SearchResultEntity>> searchResultTypes() {
        Map<String, Class<? extends SearchResultEntity>> result = new HashMap<String, Class<? extends
@@ -120,17 +119,15 @@ public class Zendesk implements Closeable {
        return Collections.unmodifiableMap(result);
     }
 
-    private Zendesk(AsyncHttpClient client, String url, String username, String password) {    
+    private Zendesk(AsyncHttpClient client, String url, String username, String password) {
         this.logger = LoggerFactory.getLogger(Zendesk.class);
         this.closeClient = client == null;
         this.oauthToken = null;
-        this.client = client == null ? new AsyncHttpClient() : client;
+        this.client = client == null ? new DefaultAsyncHttpClient() : client;
         this.url = url.endsWith("/") ? url + "api/v2" : url + "/api/v2";
         if (username != null) {
-            this.realm = new Realm.RealmBuilder()
+            this.realm = new Realm.Builder(username, password)
                     .setScheme(Realm.AuthScheme.BASIC)
-                    .setPrincipal(username)
-                    .setPassword(password)
                     .setUsePreemptiveAuth(true)
                     .build();
         } else {
@@ -147,7 +144,7 @@ public class Zendesk implements Closeable {
         this.logger = LoggerFactory.getLogger(Zendesk.class);
         this.closeClient = client == null;
         this.realm = null;
-        this.client = client == null ? new AsyncHttpClient() : client;
+        this.client = client == null ? new DefaultAsyncHttpClient() : client;
         this.url = url.endsWith("/") ? url + "api/v2" : url + "/api/v2";
         if (oauthToken != null) {
             this.oauthToken = oauthToken;
@@ -169,7 +166,11 @@ public class Zendesk implements Closeable {
 
     public void close() {
         if (closeClient && !client.isClosed()) {
-            client.close();
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new ZendeskException("Could not close client", e);
+            }
         }
         closed = true;
     }
@@ -1453,7 +1454,7 @@ public class Zendesk implements Closeable {
                 logger.debug("Request {} {}\n{}", request.getMethod(), request.getUrl(), request.getStringData());
             } else if (request.getByteData() != null) {
                 logger.debug("Request {} {} {} {} bytes", request.getMethod(), request.getUrl(),
-                        request.getHeaders().getFirstValue("Content-type"), request.getByteData().length);
+                        request.getHeaders().get("Content-type"), request.getByteData().length);
             } else {
                 logger.debug("Request {} {}", request.getMethod(), request.getUrl());
             }
@@ -1755,10 +1756,7 @@ public class Zendesk implements Closeable {
 
     private static <T> T complete(ListenableFuture<T> future) {
         try {
-            // TODO: timeout to combat problem with async-http-client, see: https://github.com/AsyncHttpClient/async-http-client/issues/1070
-            return future.get(COMPLETION_TIMEOUT_SECS, TimeUnit.SECONDS);
-        } catch(TimeoutException e) {
-            throw new ZendeskException(e.getMessage(), e);
+            return future.get();
         } catch (InterruptedException e) {
             throw new ZendeskException(e.getMessage(), e);
         } catch (ExecutionException e) {
