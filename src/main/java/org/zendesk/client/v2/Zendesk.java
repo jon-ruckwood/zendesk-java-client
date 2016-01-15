@@ -33,6 +33,7 @@ import org.zendesk.client.v2.model.Organization;
 import org.zendesk.client.v2.model.OrganizationField;
 import org.zendesk.client.v2.model.SearchResultEntity;
 import org.zendesk.client.v2.model.Status;
+import org.zendesk.client.v2.model.SuspendedTicket;
 import org.zendesk.client.v2.model.Ticket;
 import org.zendesk.client.v2.model.TicketResult;
 import org.zendesk.client.v2.model.TicketForm;
@@ -45,6 +46,7 @@ import org.zendesk.client.v2.model.hc.Article;
 import org.zendesk.client.v2.model.hc.ArticleAttachments;
 import org.zendesk.client.v2.model.hc.Category;
 import org.zendesk.client.v2.model.hc.Section;
+import org.zendesk.client.v2.model.hc.Translation;
 import org.zendesk.client.v2.model.targets.BasecampTarget;
 import org.zendesk.client.v2.model.targets.CampfireTarget;
 import org.zendesk.client.v2.model.targets.EmailTarget;
@@ -450,6 +452,20 @@ public class Zendesk implements Closeable {
 
     public void deleteTicketField(long id) {
         complete(submit(req("DELETE", tmpl("/ticket_fields/{id}.json").set("id", id)), handleStatus()));
+    }
+
+    public Iterable<SuspendedTicket> getSuspendedTickets() {
+        return new PagedIterable<SuspendedTicket>(cnst("/suspended_tickets.json"),
+            handleList(SuspendedTicket.class, "suspended_tickets"));
+    }
+
+    public void deleteSuspendedTicket(SuspendedTicket ticket) {
+        checkHasId(ticket);
+        deleteSuspendedTicket(ticket.getId());
+    }
+
+    public void deleteSuspendedTicket(long id) {
+        complete(submit(req("DELETE", tmpl("/suspended_tickets/{id}.json").set("id", id)), handleStatus()));
     }
 
     public Attachment.Upload createUpload(String fileName, byte[] content) {
@@ -896,8 +912,8 @@ public class Zendesk implements Closeable {
 
     public Iterable<Organization> getOrganizationsIncrementally(Date startTime) {
         return new PagedIterable<Organization>(
-            tmpl("/incremental/users.json{?start_time}").set("start_time", msToSeconds(startTime.getTime())), 
-            handleIncrementalList(Organization.class, "users"));                
+            tmpl("/incremental/organizations.json{?start_time}").set("start_time", msToSeconds(startTime.getTime())), 
+            handleIncrementalList(Organization.class, "organizations"));
     }
 
     public Iterable<OrganizationField> getOrganizationFields() {
@@ -1327,6 +1343,11 @@ public class Zendesk implements Closeable {
                 handle(Article.class, "article")));
     }
 
+    public Iterable<Translation> getArticleTranslations(Long articleId) {
+        return new PagedIterable<Translation>(
+            tmpl("/help_center/articles/{articleId}/translations.json").set("articleId", articleId),
+            handleList(Translation.class, "translations"));
+    }
     public Article createArticle(Article article) {
         checkHasSectionId(article);
         return complete(submit(req("POST", tmpl("/help_center/sections/{id}/articles.json").set("id", article.getSectionId()),
@@ -1355,6 +1376,11 @@ public class Zendesk implements Closeable {
                 handle(Category.class, "category")));
     }
 
+    public Iterable<Translation> getCategoryTranslations(Long categoryId) {
+        return new PagedIterable<Translation>(
+            tmpl("/help_center/categories/{categoryId}/translations.json").set("categoryId", categoryId),
+            handleList(Translation.class, "translations"));
+    }
     public Category createCategory(Category category) {
         return complete(submit(req("POST", cnst("/help_center/categories.json"),
                 JSON, json(Collections.singletonMap("category", category))), handle(Category.class, "category")));
@@ -1387,6 +1413,11 @@ public class Zendesk implements Closeable {
                 handle(Section.class, "section")));
     }
 
+    public Iterable<Translation> getSectionTranslations(Long sectionId) {
+        return new PagedIterable<Translation>(
+            tmpl("/help_center/sections/{sectionId}/translations.json").set("sectionId", sectionId),
+            handleList(Translation.class, "translations"));
+    }
     public Section createSection(Section section) {
         return complete(submit(req("POST", cnst("/help_center/sections.json"), JSON,
                 json(Collections.singletonMap("section", section))), handle(Section.class, "section")));
@@ -1834,6 +1865,12 @@ public class Zendesk implements Closeable {
     private static void checkHasId(Section section) {
         if (section.getId() == null) {
             throw new IllegalArgumentException("Section requires id");
+        }
+    }
+
+    private static void checkHasId(SuspendedTicket ticket) {
+        if (ticket == null || ticket.getId() == null) {
+            throw new IllegalArgumentException("SuspendedTicket requires id");
         }
     }
 
