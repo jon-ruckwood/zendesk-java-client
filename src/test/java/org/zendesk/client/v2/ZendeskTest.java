@@ -12,7 +12,9 @@ import org.zendesk.client.v2.model.Type;
 
 import java.util.Calendar;
 import java.util.Date;
+import java.util.TimeZone;
 
+import static java.util.Calendar.APRIL;
 import static java.util.Calendar.JANUARY;
 import static java.util.Calendar.MILLISECOND;
 import static org.hamcrest.CoreMatchers.instanceOf;
@@ -41,7 +43,7 @@ public class ZendeskTest {
         // given
         server.enqueue(new MockResponse().setBody("\"ticket\": {}"));
 
-        final Calendar cal = Calendar.getInstance();
+        final Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         cal.set(2015, JANUARY, 1, 0, 1, 2);
         cal.set(MILLISECOND, 0);
         final Date dueAt = cal.getTime();
@@ -60,6 +62,58 @@ public class ZendeskTest {
         final String body = request.getBody().readUtf8();
         assertThat(body, containsString("\"type\":\"task\""));
         assertThat(body, containsString("\"due_at\":\"2015-01-01T00:01:02.000Z\""));
+    }
+
+    @Test
+    public void createTicketAsTaskWithDueAtSetDuringDaylightSavings() throws Exception {
+        // given
+        server.enqueue(new MockResponse().setBody("\"ticket\": {}"));
+
+        final Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        cal.set(2015, APRIL, 1, 0, 1, 2);
+        cal.set(MILLISECOND, 0);
+        final Date dueAt = cal.getTime();
+
+        final Ticket ticket = new Ticket();
+        ticket.setType(Type.TASK);
+        ticket.setDueAt(dueAt);
+
+        // when
+        zendesk.createTicket(ticket);
+
+        // then
+        final RecordedRequest request = server.takeRequest();
+        assertThat(request.getRequestLine(), startsWith("POST /api/v2/tickets.json"));
+
+        final String body = request.getBody().readUtf8();
+        assertThat(body, containsString("\"type\":\"task\""));
+        assertThat(body, containsString("\"due_at\":\"2015-04-01T00:01:02.000Z\""));
+    }
+
+    @Test
+    public void createTicketAsTaskWithDueAtSetDuringDaylightSavings_EUrLon() throws Exception {
+        // given
+        server.enqueue(new MockResponse().setBody("\"ticket\": {}"));
+
+        final Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        cal.set(2015, APRIL, 1, 0, 1, 2);
+        cal.set(MILLISECOND, 0);
+        final Date dueAt = cal.getTime();
+
+        final Ticket ticket = new Ticket();
+        ticket.setType(Type.TASK);
+        ticket.setDueAt(dueAt);
+
+        // when
+        zendesk.createTicket(ticket);
+
+        // then
+        final RecordedRequest request = server.takeRequest();
+        assertThat(request.getRequestLine(), startsWith("POST /api/v2/tickets.json"));
+
+        final String body = request.getBody().readUtf8();
+        assertThat(body, containsString("\"type\":\"task\""));
+        assertThat(body, containsString("\"due_at\":\"2015-04-01T00:01:02.000Z\""));
     }
 
     @Test(timeout = 60 * 1000)

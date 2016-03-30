@@ -1,11 +1,12 @@
 package org.zendesk.client.v2.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * @author stephenc
@@ -86,6 +87,7 @@ public class Ticket extends Request implements SearchResultEntity {
     }
 
     @JsonProperty("due_at")
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss.SSSXXX", timezone = "UTC")
     public Date getDueAt() {
         return dueAt;
     }

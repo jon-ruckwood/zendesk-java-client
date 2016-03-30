@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.module.SimpleModule;
 import org.asynchttpclient.AsyncCompletionHandler;
 import org.asynchttpclient.AsyncHttpClient;
 import org.asynchttpclient.DefaultAsyncHttpClient;
@@ -1898,11 +1897,6 @@ public class Zendesk implements Closeable {
         mapper.enable(DeserializationFeature.READ_ENUMS_USING_TO_STRING);
         mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-
-        final SimpleModule module = new SimpleModule();
-        module.addSerializer(Date.class, new ISO8601DateJsonSerializer());
-        mapper.registerModule(module);
-
         return mapper;
     }
 
